@@ -134,6 +134,5 @@ print("Masses:")
 while n <= ball_count:
     masses.append(int(input(f"#{n}: ")))
     n += 1
-    print("Commit and push test!!!!")
 if __name__ == "__main__":
     run(window, WIDTH, HEIGHT, ball_count)
