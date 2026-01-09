@@ -2,11 +2,13 @@ import pygame
 import pymunk
 import pymunk.pygame_util
 import math
+import random
 
 pygame.init()
 
 WIDTH, HEIGHT = 1000, 800
 window = pygame.display.set_mode((WIDTH, HEIGHT))
+scaler = 0.1
 
 def calc_dist(p1, p2):
      return math.sqrt((p2[1] - p1[1])**2 + ((p2[0] - p1[0])**2))
@@ -14,23 +16,53 @@ def calc_dist(p1, p2):
 def calc_angle(p1, p2):
      return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
 
+def display_text(text, x, y):
+    textRect = text.get_rect()
+    textRect.center = (x, y)
+    window.blit(text, textRect)
 
 def draw(space, window, draw_options, live_line, live_circle, lines, positions, radii):
     window.fill("white")
-    space.debug_draw(draw_options)        
-    
-    if live_line:
-        pygame.draw.line(window, "black", live_line[0], live_line[1], 3)
+    space.debug_draw(draw_options)       
+    font = pygame.font.Font('freesansbold.ttf', 16)
+    white, black = (0, 0, 0,), (255, 255, 255)
+
     if live_circle:
-        pygame.draw.circle(window, "black", live_circle[0], live_circle[1])
+        pygame.draw.circle(window, "red", live_circle[0], live_circle[1])
+
+        textX, textY = live_circle[0][0], live_circle[0][1] + live_circle[1] #x: circle pos, y = circle pos + mouse dist from pos
+        text = font.render(str(int(live_circle[1] * scaler)) + " m", True, white, black)
+        display_text(text, textX, textY)
 
     i = 0
     while i < len(radii):
-       pygame.draw.circle(window, "red", positions[i], radii[i]) #pos, radius
-       i += 1
+        pygame.draw.circle(window, "black", positions[i], radii[i]) #pos, radius
 
+        text = font.render(str(int(radii[i] * scaler)) + " m", True, white, black)
+        display_text(text, positions[i][0], positions[i][1] + radii[i]) #x: circle pos, y = circle pos + radius
+
+        massText = font.render(str(int(masses[i])) + " kg", True, white, black)
+        display_text(massText, positions[i][0], positions[i][1]) # center
+        i += 1
+    
+    if live_line:
+        pygame.draw.line(window, "red", live_line[0], live_line[1], 3)
+
+        velocity = calc_dist(live_line[1], live_line[0]) * scaler
+        text = font.render(str(int(velocity)) + " m/s", True, white, black)
+        display_text(text, abs(live_line[1][0] + live_line[0][0]) / 2, abs(live_line[1][1] + live_line[0][1]) / 2) # abs( coords ) / 2
+
+        
     for line in lines:
-        pygame.draw.line(window, "red", line[0], line[1])
+        pygame.draw.line(window, "grey", line[0], line[1], 3)
+
+        velocity = calc_dist(line[1], line[0]) * scaler
+        text = font.render(str(int(velocity)) + " m/s", True, white, black)
+        display_text(text, abs(line[1][0] + line[0][0]) / 2, abs(line[1][1] + line[0][1]) / 2) # abs( coords ) / 2
+        
+
+
+    
 
     pygame.display.update()    
 
@@ -56,7 +88,7 @@ def create_ball(space, radius, mass, pos):
     body.position = pos
     shape = pymunk.Circle(body, radius)
     shape.mass = mass
-    shape.color = (255,0,0,100)
+    shape.color = (random.randint(0, 255),random.randint(0, 255),random.randint(0, 255),100)
     shape.elasticity = 1
     space.add(body, shape)
     return shape
@@ -67,11 +99,10 @@ def run(window, width, height, max_ball_count):
     fps = 60
     dt = 1 / fps
     ball_count = 0
-    lines = []
-    positions = []
+    lines = [] # [(ball_pos1, pressed_pos1), (ball_pos2, pressed_pos2), ...]
+    positions = [] # [ball_pos1, ball_pos2, ...]
     forces = []
     radii = []
-    mass = 10
     
 
     space = pymunk.Space()
@@ -85,9 +116,9 @@ def run(window, width, height, max_ball_count):
     radius = None
 
     while run:      
-        if radius:
+        if radius: #when choosing speed, between 2nd & 3rd click
             live_line = [ball_pos, pygame.mouse.get_pos()]
-        elif ball_pos:
+        elif ball_pos: #when choosing radius, between 1st & 2nd click
             live_circle = [ball_pos, calc_dist(ball_pos, pygame.mouse.get_pos())]       
 
         for event in pygame.event.get():
@@ -95,17 +126,17 @@ def run(window, width, height, max_ball_count):
                     run = False
                     break
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if (ball_count < max_ball_count) and (not ball_pos) and (not radius): 
+                if (ball_count < max_ball_count) and (not ball_pos) and (not radius): #First click, choose position
                     ball_pos = pygame.mouse.get_pos()
                     positions.append(ball_pos)
                     ball_count += 1
-                elif ball_pos and (not radius):
+                elif ball_pos and (not radius): #Second click choose radius
                     radius = calc_dist(ball_pos, pygame.mouse.get_pos())
                     radii.append(radius)
-                elif radius:
+                elif radius: #Third click choose speed
                     pressed_pos = pygame.mouse.get_pos()
                     lines.append((ball_pos, pressed_pos))
-                    forces.append((calc_angle(ball_pos, pressed_pos), calc_dist(ball_pos, pressed_pos) * 25)) #angle, magnitude * multiplier
+                    forces.append((calc_angle(ball_pos, pressed_pos), calc_dist(ball_pos, pressed_pos) * 1)) #angle, magnitude * multiplier
                     ball_pos = None
                     pressed_pos = None
                     radius = None
@@ -113,7 +144,7 @@ def run(window, width, height, max_ball_count):
                     i = 0
                     while i < max_ball_count:
                         thing = create_ball(space, radii[i], masses[i], positions[i])
-                        thing.body.apply_impulse_at_local_point((forces[i][1] * math.cos(forces[i][0]), forces[i][1] * math.sin(forces[i][0])), (0, 0))
+                        thing.body.apply_impulse_at_local_point((forces[i][1] * math.cos(forces[i][0]) * masses[i], forces[i][1] * math.sin(forces[i][0]) * masses[i]), (0, 0))
                         i += 1
                     circles, forces, lines, radii, live_circle, live_line = [], [], [], [], None, None
                     break
