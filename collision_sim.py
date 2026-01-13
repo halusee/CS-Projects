@@ -7,7 +7,7 @@ import pandas as pd
 
 pygame.init()
 
-header = [[ 'time', 'mass', 'velocity', 'momentum', 'kinetic energy']]
+header = [[ 'index', 'time', 'mass', 'velocity', 'momentum', 'kinetic energy']]
 hd = pd.DataFrame(header)
 hd.to_csv('projectile_data.csv', mode='w', header=False)
 
@@ -110,12 +110,12 @@ def run(window, width, height, max_ball_count):
         ball_data = []
         for ball in balls:
             current_time = pygame.time.get_ticks()
+            index = balls.index(ball)
             mass = ball.body.mass
-            velocity = trunc(ball.body.velocity.length, 2)
+            velocity = trunc(ball.body.velocity.length * scaler, 2)
             momentum = trunc(velocity * mass, 2)
-            kinetic_energy = trunc(mass * (velocity)**2, 2)
-
-            ball_data.append([current_time, mass, velocity, momentum, kinetic_energy])
+            kinetic_energy = trunc(0.5 * ball.body.kinetic_energy * (scaler**2), 2)
+            ball_data.append([index, current_time, mass, velocity, momentum, kinetic_energy])
         df = pd.DataFrame(ball_data)
         df.to_csv('projectile_data.csv', mode='a', header=False)
 
