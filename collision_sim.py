@@ -3,18 +3,28 @@ import pymunk
 import pymunk.pygame_util
 import math
 import random
+import pandas as pd
 
 pygame.init()
 
+header = [[ 'time', 'mass', 'velocity', 'momentum', 'kinetic energy']]
+hd = pd.DataFrame(header)
+hd.to_csv('projectile_data.csv', mode='w', header=False)
+
+
 WIDTH, HEIGHT = 1000, 800
 window = pygame.display.set_mode((WIDTH, HEIGHT))
-scaler = 0.1
+scaler = 0.1 # scales animation to "feel" more like the numbers/be more exciting
 
 def calc_dist(p1, p2):
      return math.sqrt((p2[1] - p1[1])**2 + ((p2[0] - p1[0])**2))
 
 def calc_angle(p1, p2):
      return math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+
+def trunc(num, decimals=0):
+    multiplier = 10**decimals
+    return int(num * multiplier) / multiplier
 
 def display_text(text, x, y):
     textRect = text.get_rect()
@@ -68,7 +78,6 @@ def boundaries(space, width, height):
         shape.elasticity = 1
         space.add(body, shape)
      
-
 def create_ball(space, radius, mass, pos):
     body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
     body.position = pos
@@ -79,7 +88,9 @@ def create_ball(space, radius, mass, pos):
     space.add(body, shape)
     return shape
 
+
 def run(window, width, height, max_ball_count):
+
     run = True
     clock = pygame.time.Clock()
     fps = 60
@@ -87,13 +98,31 @@ def run(window, width, height, max_ball_count):
     ball_count = 0
     lines = [] # [(ball_pos1, pressed_pos1), (ball_pos2, pressed_pos2), ...]
     positions = [None] # [ball_pos1, ball_pos2, ...]
-    forces = []
+    velocities = []
     radii = []
-    
+    balls = []
 
     space = pymunk.Space()
     boundaries(space, width, height)
     draw_options = pymunk.pygame_util.DrawOptions(window)
+
+    def coll_separate(arbiter, space, data):
+        ball_data = []
+        for ball in balls:
+            current_time = pygame.time.get_ticks()
+            mass = ball.body.mass
+            velocity = trunc(ball.body.velocity.length, 2)
+            momentum = trunc(velocity * mass, 2)
+            kinetic_energy = trunc(mass * (velocity)**2, 2)
+
+            ball_data.append([current_time, mass, velocity, momentum, kinetic_energy])
+        df = pd.DataFrame(ball_data)
+        df.to_csv('projectile_data.csv', mode='a', header=False)
+
+        return True
+    
+    space.on_collision(None, None, coll_separate)
+
 
     radius = None 
     pressed_pos = None
@@ -112,7 +141,7 @@ def run(window, width, height, max_ball_count):
             if event.type == pygame.QUIT:
                     run = False
                     break
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 if (ball_count < max_ball_count) and (not positions[-1]) and (not radius): #First click, choose position
                     positions[-1] = pygame.mouse.get_pos()
                     radii.append(calc_dist(positions[-1], pygame.mouse.get_pos()) ) # place holder 
@@ -124,22 +153,23 @@ def run(window, width, height, max_ball_count):
                 elif radius: #Third click choose speed
                     pressed_pos = pygame.mouse.get_pos()
                     lines[-1] = [positions[-1], pressed_pos]
-                    forces.append((calc_angle(positions[-1], pressed_pos), calc_dist(positions[-1], pressed_pos) * 1)) #angle, magnitude * multiplier
+                    velocities.append((calc_angle(positions[-1], pressed_pos), calc_dist(positions[-1], pressed_pos) * 1)) #angle, magnitude * multiplier
                     positions.append(None)
                     pressed_pos = None
                     radius = None
                 else:
                     i = 0
                     while i < max_ball_count:
-                        thing = create_ball(space, radii[i], masses[i], positions[i])
-                        thing.body.apply_impulse_at_local_point((forces[i][1] * math.cos(forces[i][0]) * masses[i], forces[i][1] * math.sin(forces[i][0]) * masses[i]), (0, 0))
+                        balls.append(create_ball(space, radii[i], masses[i], positions[i]))
+                        balls[i].body.velocity = velocities[i][1] * math.cos(velocities[i][0]) , velocities[i][1] * math.sin(velocities[i][0])
                         i += 1
-                    forces, lines, radii,  =  [], [], []
+                    velocities, lines, radii,  =  [], [], []
                     break
 
         draw(space, window, draw_options, lines, positions, radii)
         space.step(dt)
         clock.tick(fps)
+
     pygame.quit()
 
 masses = []
